@@ -1,0 +1,62 @@
+import requests
+from PIL import Image
+import matplotlib.pyplot as plt
+from transformers import BlipProcessor, BlipForConditionalGeneration
+import torch
+
+# -------------------------------
+# Setup BLIP model and processor
+# -------------------------------
+MODEL_NAME = "Salesforce/blip-image-captioning-base"
+processor = BlipProcessor.from_pretrained(MODEL_NAME)
+model = BlipForConditionalGeneration.from_pretrained(MODEL_NAME)
+
+# -------------------------------
+# Load image safely
+# -------------------------------
+def load_image(url: str) -> Image.Image:
+    try:
+        response = requests.get(url, stream=True, timeout=10)
+        response.raise_for_status()
+        return Image.open(response.raw).convert("RGB")
+    except Exception as e:
+        raise RuntimeError(f"Failed to load image: {e}")
+
+# -------------------------------
+# Generate caption(s)
+# -------------------------------
+def generate_caption(image: Image.Image, question: str = None, num_captions: int = 1) -> list:
+    # Prepare inputs
+    inputs = processor(image, question if question else "", return_tensors="pt")
+
+    # Generate with sampling for variety
+    outputs = model.generate(
+        **inputs,
+        max_length=40,
+        num_beams=5,
+        num_return_sequences=num_captions,
+        do_sample=True,
+        top_p=0.9
+    )
+
+    # Decode all captions
+    return [processor.decode(out, skip_special_tokens=True) for out in outputs]
+
+# -------------------------------
+# Main execution
+# -------------------------------
+if __name__ == "__main__":
+    img_url = "https://images.unsplash.com/photo-1517849845537-4d257902454a"
+    image = load_image(img_url)
+
+    # Show image
+    plt.imshow(image)
+    plt.axis("off")
+    plt.show()
+
+    # Generate multiple captions
+    captions = generate_caption(image, num_captions=3)
+
+    print("\nGenerated Captions:")
+    for i, cap in enumerate(captions, 1):
+        print(f"{i}. {cap}")
